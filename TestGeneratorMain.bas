@@ -1,4 +1,4 @@
-Attribute VB_Name = "Module1"
+Attribute VB_Name = "MakeTest3"
 Function RandString(n As Long) As String
     'Assumes that Randomize has been invoked by caller
     Dim i As Long, j As Long, m As Long, s As String, pool As String
@@ -10,7 +10,11 @@ Function RandString(n As Long) As String
     Next i
     RandString = s
 End Function
-
+Function ErrorHandler()
+    MsgBox ("You've entered something funny... Please, only enter numbers, no words or weird characters.")
+    MsgBox ("Restarting...")
+    GoTo Line1
+End Function
 Function MakeNewSheet()
     Randomize
     strname = RandString(5)
@@ -61,7 +65,7 @@ Function MakeNewSheet()
 End Function
 
 Function SimplePrintToPDF(Name)
-    SvAs = Name
+    SvAs = Application.ThisWorkbook.Path & "\" & Name
     'MsgBox (SvAs)
     ActiveSheet.ExportAsFixedFormat Type:=xlTypePDF, Filename:=SvAs, Quality:=xlQualityStandard, _
         IncludeDocProperties:=False, IgnorePrintAreas:=False, OpenAfterPublish:=False
@@ -108,16 +112,47 @@ Function IsInArray(numArray, Test, size)
     IsInArray = False
 End Function
 
+Function GetPriQuestionList(length, QBSize)
+    Dim PriList() As Variant
+    ReDim PriList(length - 1)
+    Col = FindCol(QuestionBank.Name, "Priority")
+    Counter = -1
+    For i = 2 To QBSize Step 1
+        If Cells(i, Col).Value = 1 Then
+            Counter = Counter + 1
+                If Counter > length - 1 Then
+                    MsgBox ("The number of priority questions exceeds the length of the test. Some questions will not be included in the final test.")
+                    Exit For
+                End If
+            Debug.Print (Counter)
+            PriList(Counter) = i - 1
+        End If
+    Next
+    GetPriQuestionList = PriList
+    Debug.Print (PriList(1))
+End Function
 
-Function GetIndexList(length, QBSize)
-    Dim INDEX() As Integer
+Function GetIndexList(length, QBSize, Pri)
+    Dim INDEX() As Variant
     ReDim INDEX(length - 1)
     'MsgBox (length & " " & QBSize)
+    For Each num In Pri
+        If num = "" Then
+            Exit For
+        End If
+        Test = WorksheetFunction.RandBetween(0, length - 1)
+        While INDEX(Test) <> ""
+            Test = WorksheetFunction.RandBetween(0, length - 1)
+        Wend
+        INDEX(Test) = num
+    Next
+    
+    
     For i = 0 To length - 1 Step 1
         Test = WorksheetFunction.RandBetween(2, QBSize)
         If IsInArray(INDEX, Test, i) = True Then
             i = i - 1
-        Else
+        ElseIf INDEX(i) = "" Then
             INDEX(i) = Test
         End If
     Next i
@@ -174,9 +209,7 @@ End Function
 'Created by LTJG Joseph Roehm, feel free to use whatever code you would like!
 'Unapologetically leaving my name here
 
-Sub makeTest()
-Attribute makeTest.VB_Description = "Makes the test"
-Attribute makeTest.VB_ProcData.VB_Invoke_Func = " \n14"
+Sub MakeTest3()
 '
 ' makeTest Macro
 ' Makes the test
@@ -184,7 +217,7 @@ Attribute makeTest.VB_ProcData.VB_Invoke_Func = " \n14"
 
 '
     Application.ScreenUpdating = False
-    QBName = Sheets("Question Bank").Name
+    QBName = QuestionBank.Name
     Worksheets(QBName).Activate
     'Gets length of question bank
     rowCol = FirstCol(QBName)
@@ -210,17 +243,28 @@ Attribute makeTest.VB_ProcData.VB_Invoke_Func = " \n14"
     
     'Get number of questions per test from user
     Dim TEST_LEN As Integer
+    'On Error GoTo ErrorHandler()
+'Line1:
     TEST_LEN = InputBox("Number of Questions")
-    While TEST_LEN > QUESTION_TOTAL
+    While (TEST_LEN > QUESTION_TOTAL) Or (TEST_LEN < 0)
         TEST_LEN = InputBox("Only " & QUESTION_TOTAL & " Available. Enter Again")
     Wend
     
+    
+    'Create list of Question Objects
+    Dim cQuest() As New cQuestion
+    ReDim cQuest(TEST_LEN - 1)
     'Get number of unique test versions from user
     Dim NUM_OF_TESTS As Integer
     NUM_OF_TESTS = InputBox("Number of Test Versions")
-    While NUM_OF_TESTS > 15
+    While (NUM_OF_TESTS > 15) Or (NUM_OF_TESTS < 0)
         NUM_OF_TESTS = InputBox("Number must be 15 or less, enter again")
     Wend
+    
+    'Get priority questions from user
+    Dim PRIORITY_QUESTIONS() As Variant
+    ReDim PRIORITY_QUESTIONS(TEST_LEN - 1)
+    PRIORITY_QUESTIONS = GetPriQuestionList(TEST_LEN, QUESTION_TOTAL)
     
     For j = 0 To NUM_OF_TESTS - 1 Step 1
     
@@ -230,9 +274,9 @@ Attribute makeTest.VB_ProcData.VB_Invoke_Func = " \n14"
         Worksheets(QBName).Activate
         
         'Get random question numbers
-        Dim QUESTION_INDEX() As Integer
-        ReDim QUESTION_INDEX(TEST_LEN)
-        QUESTION_INDEX = GetIndexList(TEST_LEN, QUESTION_TOTAL)
+        Dim QUESTION_INDEX() As Variant
+        ReDim QUESTION_INDEX(TEST_LEN - 1)
+        QUESTION_INDEX = GetIndexList(TEST_LEN, QUESTION_TOTAL, PRIORITY_QUESTIONS)
         'For i = 0 To TEST_LEN - 1 Step 1
         '    MsgBox (QUESTION_INDEX(i))
         'Next
@@ -257,16 +301,13 @@ Attribute makeTest.VB_ProcData.VB_Invoke_Func = " \n14"
         'For i = 0 To TEST_LEN - 1 Step 1
         '    MsgBox (SELECTION_A_LIST(i))
         'Next
-        
-        'Create list of Question Objects
-        Dim cQuest() As New cQuestion
-        ReDim cQuest(TEST_LEN - 1)
+
         
         'Insert info into the Question Objects
         For i = 0 To TEST_LEN - 1 Step 1
             cQuest(i).Set_Answer = SELECTION_A_LIST(i)
             cQuest(i).Set_Question = SELECTION_Q_LIST(i)
-            cQuest(i).Set_Loc = QUESTION_INDEX(i) + 1
+            cQuest(i).Set_Loc = QUESTION_INDEX(i)
             cQuest(i).Set_Refer = SELECTION_R_LIST(i)
         Next i
         'For i = 0 To TEST_LEN - 1 Step 1
@@ -288,3 +329,5 @@ Attribute makeTest.VB_ProcData.VB_Invoke_Func = " \n14"
     Application.ScreenUpdating = True
     
 End Sub
+
+
